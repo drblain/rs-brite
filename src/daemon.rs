@@ -43,6 +43,7 @@ pub fn run_daemon(trigger_key: Key, mut action: impl Job) -> Result<()>
         }
     };
 
-    listen(cb_listener)
-        .map_err(|e| anyhow::anyhow!("Listener failed: {:?}", e));
+    listen(cb_listener)?;
+
+    Ok(())
 }
