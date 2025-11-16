@@ -1,6 +1,6 @@
-use anyhow::Result;
-use brightness::blocking::BrightnessDevice;
-use image::{ImageBuffer, Pixel};
+use anyhow::{anyhow, Result};
+use brightness::blocking::Brightness;
+use image::{ImageBuffer, Pixel, Rgb};
 use nokhwa::{
     pixel_format::RgbFormat,
     utils::{CameraIndex, RequestedFormat, RequestedFormatType},
@@ -17,8 +17,8 @@ type RgbImage = ImageBuffer<Rgb<u8>, Vec<u8>>;
 pub fn setup_camera() -> Result<Camera> {
     // Get the first camera
     let index = CameraIndex::Index(0);
-    let fmt_requested = RequestedFormat::new<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
-    Camera::new(index, fmt_requested)?;
+    let fmt_requested = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
+    let camera = Camera::new(index, fmt_requested)?;
 
     Ok(camera)
 }
@@ -38,7 +38,7 @@ fn capture_frame(camera: &mut Camera) -> Result<RgbImage> {
     // convert image from stream to RGB for use
     let image: RgbImage = frame_buffer.decode_image::<RgbFormat>()?;
 
-    Ok(image);
+    Ok(image)
 }
 
 fn compute_luma(image: &RgbImage) -> Result<u8> {
@@ -64,7 +64,7 @@ fn compute_luma(image: &RgbImage) -> Result<u8> {
 fn set_screen_brightness(percent: u32) -> Result<()> {
     // set the brightness for the first (primary) brightness device
     for device in brightness::blocking::brightness_devices() {
-        if let Ok(mut dev) = device {
+        if let Ok(dev) = device {
             dev.set(percent)?;
             return Ok(());
         }
