@@ -67,6 +67,9 @@ fn adjusted_luma(raw_luma: f32) -> Result<f32> {
     let current_brightness = get_screen_brightness()
         .unwrap_or(SCREEN_BRIGHTNESS_DEFAULT);
 
+    // could put logic to grab the current screen content
+    // and multiply the screen brightness by its luma
+
     let screen_contribution = (current_brightness as f32 / FLOAT_MAX_PERCENT * FLOAT_MAX_COLOR) * SCREEN_REFLECTION_FACTOR;
 
     let adjusted_luma = raw_luma - screen_contribution;
