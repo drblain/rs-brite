@@ -2,12 +2,14 @@ mod daemon;
 mod image_processor;
 
 use anyhow::Result;
-use rdev::Key;
+use global_hotkey::hotkey::{Code, Modifiers};
 
 fn main() -> Result<()> {
     println!("Starting rs-brite...");
 
-    let hotkey = Key::F12;
+    let hotkey = Code::F12;
+    let exitkey = Code::Escape;
+    let modifiers = Modifiers::CONTROL | Modifiers::SHIFT;
 
     let brightness_factory = move || {
         let mut camera = image_processor::setup_camera()?;
@@ -19,7 +21,7 @@ fn main() -> Result<()> {
         })
     };
 
-    if let Err(e) = daemon::run_daemon(hotkey, brightness_factory) {
+    if let Err(e) = daemon::run_daemon(Some(modifiers), exitkey, hotkey, brightness_factory) {
         eprintln!("[Main] Critical Daemon Error: {}", e);
     }
 

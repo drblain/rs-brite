@@ -1,20 +1,35 @@
 use anyhow::{anyhow, Result};
-use rdev::{listen, Event, EventType, Key};
+use global_hotkey::{
+    GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
+    hotkey::{Code, HotKey, Modifiers}
+};
 use std::{sync::mpsc, thread, process};
 
+// Job is a closure that can be called mutably and lives for the whole program
 pub trait Job: FnMut() + 'static {}
 impl<F: FnMut() + 'static> Job for F {}
 pub trait Recipe<J: Job>: FnOnce() -> Result<J> + Send + 'static {}
 impl<F, J: Job> Recipe<J> for F where F: FnOnce() -> Result<J> + Send + 'static {}
 
-// Job is a closue that
-// 1. can be called mutably (FnMut())
-// 2. can be sent between threads (Send)
-// 3. lives for the whole program ('static)
-pub fn run_daemon<J>(trigger_key: Key, initializer: impl Recipe<J>) -> Result<()>
+pub fn run_daemon<J>(modifiers: Option<Modifiers>, close_key: Code, trigger_key: Code, initializer: impl Recipe<J>) -> Result<()>
 where
     J: Job
 {
+    let manager = GlobalHotKeyManager::new().map_err(|e| {
+        anyhow!("[Daemon] Failed to create hotkey manager: {:?}", e)
+    })?;
+
+    let hotkey = HotKey::new(modifiers, trigger_key);
+    let exitkey = HotKey::new(modifiers, close_key);
+
+    manager.register(hotkey).map_err(|e| {
+        anyhow!("[Daemon] Failed to register hotkey: {:?}", e)
+    })?;
+
+    manager.register(exitkey).map_err(|e| {
+        anyhow!("[Daemon] Failed to register exit hotkey: {:?}", e)
+    })?;
+
     let (transmit, receive) = mpsc::channel::<()>();
 
     thread::spawn(move || {
@@ -42,20 +57,27 @@ where
 
     println!("[Daemon] Starting hotkey listener...");
     
-    let cb_listener = move |event: Event| {
-        match event.event_type {
-            EventType::KeyPress(key) if key == trigger_key => {
-                if let Err(e) = transmit.send(()) {
-                        eprintln!("[Daemon] Worker thread is dead with {}. Shutting down.", e);
-                        process::exit(1);
+    let hotkey_receiver = GlobalHotKeyEvent::receiver();
+
+    for event in hotkey_receiver {
+        match event {
+            GlobalHotKeyEvent { id, state: HotKeyState::Pressed } if id == hotkey.id() => {
+                println!("[Daemon] Hotkey pressed! Signaling worker thread...");
+
+                if let Err(e) = transmit.send(()){
+                    eprintln!("[Daemon] Failed to send signal to worker thread with error: {}. Exiting daemon.", e);
+                    process::exit(1);
                 }
             }
+
+            GlobalHotKeyEvent { id, state: HotKeyState::Pressed } if id == exitkey.id() => {
+                println!("[Daemon] Exit hotkey pressed! Shutting down daemon...");
+                process::exit(0);
+            }
+
             _ => {}
         }
-    };
+    }
 
-    listen(cb_listener)
-        .map_err(|e| {
-            anyhow!("[Daemon] Fatal listener error: {:?}", e)
-        })
+    Ok(())
 }

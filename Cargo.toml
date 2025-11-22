@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 brightness = { version = "0.8.0", features = ["blocking"] }
+global-hotkey = "0.7.0"
 image = { version = "0.25.9", default-features = false, features = ["jpeg"] }
 nokhwa = { version = "0.10.10", features = ["input-native"] }
 rayon = "1.11.0"
-rdev = "0.5.3"
