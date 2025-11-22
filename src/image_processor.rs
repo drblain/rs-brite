@@ -12,6 +12,8 @@ const SIZE_CAMERA_WARMUP_FRAMES: usize = 5;
 const SIZE_RGB_CHUNK: usize = 3;
 const FLOAT_MAX_COLOR: f32 = 255.0;
 const FLOAT_MAX_PERCENT: f32 = 100.0;
+const SCREEN_BRIGHTNESS_DEFAULT: u8 = 50;
+const SCREEN_REFLECTION_FACTOR: f32 = 0.2;
 type RgbImage = ImageBuffer<Rgb<u8>, Vec<u8>>;
 
 pub fn setup_camera() -> Result<Camera> {
@@ -41,7 +43,7 @@ fn capture_frame(camera: &mut Camera) -> Result<RgbImage> {
     Ok(image)
 }
 
-fn compute_luma(image: &RgbImage) -> Result<u8> {
+fn compute_raw_luma(image: &RgbImage) -> Result<f32> {
     let raw_buffer = image.as_raw();
 
     let pixel_count = (raw_buffer.len() / SIZE_RGB_CHUNK) as u64;
@@ -58,7 +60,37 @@ fn compute_luma(image: &RgbImage) -> Result<u8> {
         })
         .sum();
 
-    Ok((total_luma / pixel_count) as u8)
+    Ok((total_luma / pixel_count) as f32)
+}
+
+fn adjusted_luma(raw_luma: f32) -> Result<f32> {
+    let current_brightness = get_screen_brightness()
+        .unwrap_or(SCREEN_BRIGHTNESS_DEFAULT);
+
+    let screen_contribution = (current_brightness as f32 / FLOAT_MAX_PERCENT * FLOAT_MAX_COLOR) * SCREEN_REFLECTION_FACTOR;
+
+    let adjusted_luma = raw_luma - screen_contribution;
+
+    println!("[Processor] Raw Luma: {:.2} - Screen Contribution: {:.2} = Adjusted Luma: {:.2}",
+        raw_luma, screen_contribution, adjusted_luma);
+
+    Ok(adjusted_luma.max(0.0) as f32)
+}
+
+fn compute_luma(image: &RgbImage) -> Result<u8> {
+    let raw_luma = compute_raw_luma(image)?;
+    let adj_luma = adjusted_luma(raw_luma)?;
+
+    Ok(adj_luma as u8)
+}
+
+fn get_screen_brightness() -> Result<u8> {
+    for device in brightness::blocking::brightness_devices() {
+        if let Ok(dev) = device {
+            return Ok(dev.get()? as u8);
+        }
+    }
+    Err(anyhow!("No primary brightness device found"))
 }
 
 fn set_screen_brightness(percent: u32) -> Result<()> {
