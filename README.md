@@ -32,9 +32,10 @@ Bash
 
 ### Controls
 
-Action,Hotkey
-Auto-Adjust Brightness,Ctrl + Shift + F12
-Exit Application,Ctrl + Shift + Esc
+| Action | Hotkey |
+|---|---|---|
+| Auto-Adjust Brightness | Ctrl + Shift + F12 |
+| Exit Application | Ctrl + Shift + Esc |
 
 ## How It Works
 
