@@ -1,0 +1,16 @@
+[Unit]
+Description=rs-brite Auto Brightness Daemon
+After=graphical-session.target
+StartLimitIntervalSec=100
+StartLimitBurst=5
+
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rs-brite
+Environment=DISPLAY=:0
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

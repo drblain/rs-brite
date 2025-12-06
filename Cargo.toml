@@ -2,11 +2,34 @@
 name = "rs-brite"
 version = "0.1.0"
 edition = "2024"
+description = "rs-brite Auto Brightness Daemon"
 
 [dependencies]
 anyhow = "1.0.100"
 brightness = { version = "0.8.0", features = ["blocking"] }
+config = "0.15.19"
 global-hotkey = "0.7.0"
 image = { version = "0.25.9", default-features = false, features = ["jpeg"] }
 nokhwa = { version = "0.10.10", features = ["input-native"] }
 rayon = "1.11.0"
+serde = { version = "1.0.228", features = ["derive"] }
+
+[package.metadata.deb]
+maintainer = "David Blain"
+copyright = "2025, David Blain"
+license-file = ["LICENSE", "4"]
+depends = "$auto"
+section = "utils"
+priority = "optional"
+
+assets = [
+    ["target/release/rs-brite", "/usr/bin/rs-brite", "755"],
+    ["packaging/rs-brite.service", "/usr/lib/systemd/user/rs-brite.service", "644"],
+    ["rs-brite.toml", "/etc/rs-brite/config.toml", "644"]
+]
+
+maintainer-scripts = "packaging/scripts"
+
+conf-files = [
+    "/etc/rs-brite/config.toml"
+]

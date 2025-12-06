@@ -13,6 +13,7 @@ const SIZE_RGB_CHUNK: usize = 3;
 const FLOAT_MAX_COLOR: f32 = 255.0;
 const FLOAT_MAX_PERCENT: f32 = 100.0;
 const SCREEN_BRIGHTNESS_DEFAULT: u8 = 50;
+const SCREEN_BRIGHTNESS_MIN: u32 = 1;
 const SCREEN_REFLECTION_FACTOR: f32 = 0.2;
 type RgbImage = ImageBuffer<Rgb<u8>, Vec<u8>>;
 
@@ -25,7 +26,7 @@ pub fn setup_camera() -> Result<Camera> {
     Ok(camera)
 }
 
-fn capture_frame(camera: &mut Camera) -> Result<RgbImage> {
+pub fn capture_frame(camera: &mut Camera) -> Result<RgbImage> {
     camera.open_stream()?;
 
     // dump warmup frames in the trash
@@ -43,7 +44,7 @@ fn capture_frame(camera: &mut Camera) -> Result<RgbImage> {
     Ok(image)
 }
 
-fn compute_raw_luma(image: &RgbImage) -> Result<f32> {
+pub fn compute_raw_luma(image: &RgbImage) -> Result<f32> {
     let raw_buffer = image.as_raw();
 
     let pixel_count = (raw_buffer.len() / SIZE_RGB_CHUNK) as u64;
@@ -63,7 +64,7 @@ fn compute_raw_luma(image: &RgbImage) -> Result<f32> {
     Ok((total_luma / pixel_count) as f32)
 }
 
-fn adjusted_luma(raw_luma: f32) -> Result<f32> {
+pub fn adjusted_luma(raw_luma: f32) -> Result<f32> {
     let current_brightness = get_screen_brightness()
         .unwrap_or(SCREEN_BRIGHTNESS_DEFAULT);
 
@@ -80,14 +81,14 @@ fn adjusted_luma(raw_luma: f32) -> Result<f32> {
     Ok(adjusted_luma.max(0.0) as f32)
 }
 
-fn compute_luma(image: &RgbImage) -> Result<u8> {
+pub fn compute_luma(image: &RgbImage) -> Result<u8> {
     let raw_luma = compute_raw_luma(image)?;
     let adj_luma = adjusted_luma(raw_luma)?;
 
     Ok(adj_luma as u8)
 }
 
-fn get_screen_brightness() -> Result<u8> {
+pub fn get_screen_brightness() -> Result<u8> {
     for device in brightness::blocking::brightness_devices() {
         if let Ok(dev) = device {
             return Ok(dev.get()? as u8);
@@ -96,11 +97,12 @@ fn get_screen_brightness() -> Result<u8> {
     Err(anyhow!("No primary brightness device found"))
 }
 
-fn set_screen_brightness(percent: u32) -> Result<()> {
+pub fn set_screen_brightness(percent: u32) -> Result<()> {
+    let percent_actual: u32 = percent.max(SCREEN_BRIGHTNESS_MIN) as u32;
     // set the brightness for the first (primary) brightness device
     for device in brightness::blocking::brightness_devices() {
         if let Ok(dev) = device {
-            dev.set(percent)?;
+            dev.set(percent_actual)?;
             return Ok(());
         }
     }
