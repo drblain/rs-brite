@@ -21,7 +21,7 @@ fn main() -> Result<()> {
     let hotkey: Code = config.hotkey.parse()
         .map_err(|e| anyhow!("Invalid hotkey code '{}': {:?}", config.hotkey, e))?;
 
-    let exitkey: Code = config.hotkey.parse()
+    let exitkey: Code = config.exit_key.parse()
         .map_err(|e| anyhow!("Invalid exit_key code '{}': {:?}", config.exit_key, e))?;
 
     let modifiers = parse_modifiers(&config.key_prefix)
