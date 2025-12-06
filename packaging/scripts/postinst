@@ -1,13 +1,10 @@
 #!/bin/sh
 set -e
 
-if [ -d /run/systemd/system ]; then
-    systemctl daemon-reload || true
-fi
-
 echo "----------------------------------------------------------------"
 echo " rs-brite installed successfully!"
 echo " To enable the daemon for your user, run:"
+echo "   systemctl --user daemon-reload"
 echo "   systemctl --user enable --now rs-brite"
 echo "----------------------------------------------------------------"
 

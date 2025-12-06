@@ -5,7 +5,7 @@ echo "Building rs-brite..."
 cargo build --release
 
 echo "Installing binary..."
-sudo install -m 755 target/relese/rs-brite /usr/bin/rs-brite
+sudo install -m 755 target/release/rs-brite /usr/bin/rs-brite
 
 echo "Installing configuration..."
 sudo mkdir -p /etc/rs-brite
