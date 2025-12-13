@@ -1,67 +1,57 @@
+use opencv::prelude::*;
 use anyhow::{anyhow, Result};
 use brightness::blocking::Brightness;
-use image::{ImageBuffer, Pixel, Rgb};
-use nokhwa::{
-    pixel_format::RgbFormat,
-    utils::{CameraIndex, RequestedFormat, RequestedFormatType},
-    Camera
+use opencv::{
+    core::{Scalar, Mat, CV_32F},
+    videoio::{VideoCapture, CAP_ANY}
 };
-use rayon::prelude::*;
+use std::sync::{Arc, LazyLock};
 
-const SIZE_CAMERA_WARMUP_FRAMES: usize = 5;
+pub struct Webcam(VideoCapture);
+
+impl Webcam {
+    pub fn new(index: i32) -> Result<Self> {
+        let camera = VideoCapture::new(0, CAP_ANY)?;
+
+        VideoCapture::is_opened(&camera)?
+            .then_some(Self(camera))
+            .ok_or_else(|| anyhow!("Failed to open camera at index {}", index))
+    }
+
+    pub fn read_frame(&mut self) -> Result<Mat> {
+        let mut frame = Mat::default();
+        self.0.read(&mut frame)?;
+
+        if frame.empty() {
+            return Err(anyhow!("Failed to capture frame"));
+        }
+
+        Ok(frame)
+    }
+}
+
 const SIZE_RGB_CHUNK: usize = 3;
-const FLOAT_MAX_COLOR: f32 = 255.0;
+const FLOAT_COMPRESSED_TO_LINEAR: f64 = 2.2;
+const FLOAT_MAX_COLOR: f64 = 255.0;
 const FLOAT_MAX_PERCENT: f32 = 100.0;
 const SCREEN_BRIGHTNESS_DEFAULT: u8 = 50;
 const SCREEN_BRIGHTNESS_MIN: u32 = 1;
 const SCREEN_REFLECTION_FACTOR: f32 = 0.2;
-type RgbImage = ImageBuffer<Rgb<u8>, Vec<u8>>;
+static COEFFS_BGR_LUMA: LazyLock<Arc<[f64]>> = LazyLock::new(|| {
+    Arc::from(vec![0.0722, 0.7152, 0.2126])
+});
 
-pub fn setup_camera() -> Result<Camera> {
-    // Get the first camera
-    let index = CameraIndex::Index(0);
-    let fmt_requested = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
-    let camera = Camera::new(index, fmt_requested)?;
+pub fn compute_raw_luma(raw_frame: &Mat) -> Result<f32> {
+    let mut float_img = Mat::default();
+    raw_frame.convert_to(&mut float_img, CV_32F, 1.0 / FLOAT_MAX_COLOR, 0.0)?;
 
-    Ok(camera)
-}
+    let mut linear_img = Mat::default();
+    opencv::core::pow(&float_img, FLOAT_COMPRESSED_TO_LINEAR, &mut linear_img)?;
 
-pub fn capture_frame(camera: &mut Camera) -> Result<RgbImage> {
-    camera.open_stream()?;
-
-    // dump warmup frames in the trash
-    for _ in 0..SIZE_CAMERA_WARMUP_FRAMES {
-        let _ = camera.frame()?;
-    }
-
-    // capture a single usable frame and immediately close the camera
-    let frame_buffer = camera.frame()?;
-    camera.stop_stream()?;
-
-    // convert image from stream to RGB for use
-    let image: RgbImage = frame_buffer.decode_image::<RgbFormat>()?;
-
-    Ok(image)
-}
-
-pub fn compute_raw_luma(image: &RgbImage) -> Result<f32> {
-    let raw_buffer = image.as_raw();
-
-    let pixel_count = (raw_buffer.len() / SIZE_RGB_CHUNK) as u64;
-
-    if pixel_count == 0 {
-        return Err(anyhow!("No pixels found in image"));
-    }
-
-    let total_luma: u64 = raw_buffer
-        .par_chunks(SIZE_RGB_CHUNK)
-        .map(|chunk| {
-            let p = image::Rgb::from_slice(chunk);
-            p.to_luma()[0] as u64
-        })
-        .sum();
-
-    Ok((total_luma / pixel_count) as f32)
+    let mut luma_img = Mat::default();
+    let coeff_mat = Mat::from_slice_2d(&COEFFS_BGR_LUMA)?;
+    opencv::core::transform(linear_img, &mut luma_img, &coeff_mat)?;
+    Ok(0 as f32)
 }
 
 pub fn adjusted_luma(raw_luma: f32) -> Result<f32> {
@@ -81,7 +71,7 @@ pub fn adjusted_luma(raw_luma: f32) -> Result<f32> {
     Ok(adjusted_luma.max(0.0) as f32)
 }
 
-pub fn compute_luma(image: &RgbImage) -> Result<u8> {
+pub fn compute_luma(image: &Mat) -> Result<u8> {
     let raw_luma = compute_raw_luma(image)?;
     let adj_luma = adjusted_luma(raw_luma)?;
 
