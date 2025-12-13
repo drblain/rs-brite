@@ -1,8 +1,4 @@
 use anyhow::{anyhow, Result};
-use global_hotkey::{
-    GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
-    hotkey::{Code, HotKey, Modifiers}
-};
 use std::{sync::mpsc, thread, process};
 
 // Job is a closure that can be called mutably and lives for the whole program

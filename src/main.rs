@@ -5,7 +5,6 @@ mod config;
 use config::AppConfig;
 
 use anyhow::{anyhow, Context, Result};
-use global_hotkey::hotkey::{Code, Modifiers};
 
 use rs_brite::{daemon, image_processor};
 

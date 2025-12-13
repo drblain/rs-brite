@@ -30,18 +30,17 @@ impl Webcam {
     }
 }
 
-const SIZE_RGB_CHUNK: usize = 3;
 const FLOAT_COMPRESSED_TO_LINEAR: f64 = 2.2;
 const FLOAT_MAX_COLOR: f64 = 255.0;
-const FLOAT_MAX_PERCENT: f32 = 100.0;
+const FLOAT_MAX_PERCENT: f64 = 100.0;
 const SCREEN_BRIGHTNESS_DEFAULT: u8 = 50;
 const SCREEN_BRIGHTNESS_MIN: u32 = 1;
-const SCREEN_REFLECTION_FACTOR: f32 = 0.2;
+const SCREEN_REFLECTION_FACTOR: f64 = 0.2;
 static COEFFS_BGR_LUMA: LazyLock<Arc<[f64]>> = LazyLock::new(|| {
     Arc::from(vec![0.0722, 0.7152, 0.2126])
 });
 
-pub fn compute_raw_luma(raw_frame: &Mat) -> Result<f32> {
+pub fn compute_raw_luma(raw_frame: &Mat) -> Result<f64> {
     let mut float_img = Mat::default();
     raw_frame.convert_to(&mut float_img, CV_32F, 1.0 / FLOAT_MAX_COLOR, 0.0)?;
 
@@ -54,24 +53,24 @@ pub fn compute_raw_luma(raw_frame: &Mat) -> Result<f32> {
 
     let raw_luma: Scalar = opencv::core::mean(&luma_img, &opencv::core::no_array())?;
 
-    Ok((raw_luma[0] * FLOAT_MAX_COLOR) as f32)
+    Ok(raw_luma[0] * FLOAT_MAX_COLOR)
 }
 
-pub fn adjusted_luma(raw_luma: f32) -> Result<f32> {
+pub fn adjusted_luma(raw_luma: f64) -> Result<f64> {
     let current_brightness = get_screen_brightness()
         .unwrap_or(SCREEN_BRIGHTNESS_DEFAULT);
 
     // could put logic to grab the current screen content
     // and multiply the screen brightness by its luma
 
-    let screen_contribution = (current_brightness as f32 / FLOAT_MAX_PERCENT * FLOAT_MAX_COLOR) * SCREEN_REFLECTION_FACTOR;
+    let screen_contribution = (current_brightness as f64 / FLOAT_MAX_PERCENT * FLOAT_MAX_COLOR) * SCREEN_REFLECTION_FACTOR;
 
     let adjusted_luma = raw_luma - screen_contribution;
 
     println!("[Processor] Raw Luma: {:.2} - Screen Contribution: {:.2} = Adjusted Luma: {:.2}",
         raw_luma, screen_contribution, adjusted_luma);
 
-    Ok(adjusted_luma.max(0.0) as f32)
+    Ok(adjusted_luma.max(0.0) as f64)
 }
 
 pub fn compute_luma(image: &Mat) -> Result<u8> {
@@ -104,12 +103,12 @@ pub fn set_screen_brightness(percent: u32) -> Result<()> {
     Err(anyhow!("No primary brightness device found"))
 }
 
-pub fn auto_brightness(camera: &mut Camera) -> Result<()> {
-    let frame_image = capture_frame(camera)?;
+pub fn auto_brightness(camera: &mut Webcam) -> Result<()> {
+    let frame_image = camera.read_frame()?;
 
     let avg_luma = compute_luma(&frame_image)?;
 
-    let percent_brightness = (avg_luma as f32 / FLOAT_MAX_COLOR * FLOAT_MAX_PERCENT) as u32;
+    let percent_brightness = (avg_luma as f64 / FLOAT_MAX_COLOR * FLOAT_MAX_PERCENT) as u32;
     println!("[Processor] Luma: {}/{} -> Setting: {}%", avg_luma, FLOAT_MAX_COLOR, percent_brightness);
     set_screen_brightness(percent_brightness)?;
 
