@@ -49,9 +49,12 @@ pub fn compute_raw_luma(raw_frame: &Mat) -> Result<f32> {
     opencv::core::pow(&float_img, FLOAT_COMPRESSED_TO_LINEAR, &mut linear_img)?;
 
     let mut luma_img = Mat::default();
-    let coeff_mat = Mat::from_slice_2d(&COEFFS_BGR_LUMA)?;
-    opencv::core::transform(linear_img, &mut luma_img, &coeff_mat)?;
-    Ok(0 as f32)
+    let coeff_mat = Mat::from_slice(&*COEFFS_BGR_LUMA)?;
+    opencv::core::transform(&linear_img, &mut luma_img, &coeff_mat)?;
+
+    let raw_luma: Scalar = opencv::core::mean(&luma_img, &opencv::core::no_array())?;
+
+    Ok((raw_luma[0] * FLOAT_MAX_COLOR) as f32)
 }
 
 pub fn adjusted_luma(raw_luma: f32) -> Result<f32> {
