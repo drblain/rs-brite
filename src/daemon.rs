@@ -12,7 +12,7 @@ impl<F: FnMut() + 'static> Job for F {}
 pub trait Recipe<J: Job>: FnOnce() -> Result<J> + Send + 'static {}
 impl<F, J: Job> Recipe<J> for F where F: FnOnce() -> Result<J> + Send + 'static {}
 
-pub fn run_daemon<J>(modifiers: Option<&[Keysym]>, close_key: Keysym, trigger_key: Keysym, initializer: impl Recipe<J>) -> Result<()>
+pub fn run_daemon<J>(modifiers: Option<ModMask>, close_key: Keysym, trigger_key: Keysym, initializer: impl Recipe<J>) -> Result<()>
 where
     J: Job
 {
@@ -39,7 +39,10 @@ where
         .ok_or_else(|| anyhow!("[Daemon] could not find keycode for trigger key: {}", u32::from(close_key)))?;
 
     // convert Keysym slice to ModMask
-    let mods = ModMask::ANY;
+    let mods = match modifiers {
+        Some(m) => m,
+        None => ModMask::ANY
+    };
 
     xconn.grab_key(
         true,

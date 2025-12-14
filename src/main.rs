@@ -17,13 +17,13 @@ fn main() -> Result<()> {
     println!("[Main] Configuration loaded: Prefix='{}', Hotkey='{}', Exit Key='{}'",
         config.key_prefix, config.hotkey, config.exit_key);
 
-    let hotkey: Keysym = config.hotkey.parse()
+    let hotkey = config.hotkey()
         .map_err(|e| anyhow!("Invalid hotkey code '{}': {:?}", config.hotkey, e))?;
 
-    let exitkey: Keysym = config.exit_key.parse()
+    let exitkey = config.exit_key()
         .map_err(|e| anyhow!("Invalid exit_key code '{}': {:?}", config.exit_key, e))?;
 
-    let modifiers = parse_modifiers(&config.key_prefix)
+    let modifiers = config.modifiers()
         .context("[Main] Failed to parse key_prefix modifiers")?;
 
     let brightness_factory = move || {
@@ -36,42 +36,9 @@ fn main() -> Result<()> {
         })
     };
 
-    if let Err(e) = daemon::run_daemon(modifiers, exitkey, hotkey, brightness_factory) {
+    if let Err(e) = daemon::run_daemon(Some(modifiers), exitkey, hotkey, brightness_factory) {
         eprintln!("[Main] Critical Daemon Error: {}", e);
     }
 
     Ok(())
-}
-
-fn parse_modifiers(str_modifiers: &str) -> Result<Option<Modifiers>> {
-    if str_modifiers.trim().is_empty() {
-        return Ok(None);
-    }
-
-    let mut mods = Modifiers::empty();
-
-    for part in str_modifiers.split('+') {
-        match part.trim().to_lowercase().as_str() {
-            "control" | "ctrl" | "lctrl" | "left_control" | "rctrl" | "right_control" => {
-                mods |= Modifiers::CONTROL;
-            },
-            "shift" | "lshift" | "rshift" | "left_shift" | "right_shift" => {
-                mods |= Modifiers::SHIFT;
-            },
-            "alt" | "option" | "lalt" | "ralt" | "left_alt" | "right_alt" => {
-                mods |= Modifiers::ALT;
-            },
-            "super" | "cmd" | "command" | "win" | "meta" => {
-                mods |= Modifiers::SUPER;
-            },
-            "" => continue,
-            _ => return Err(anyhow!("Unknown modifier: {}", part)),
-        }
-    }
-
-    if mods.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(mods))
-    }
 }
