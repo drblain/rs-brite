@@ -27,9 +27,15 @@ fn main() -> Result<()> {
         .context("[Main] Failed to parse key_prefix modifiers")?;
 
     let brightness_factory = move || {
-        let mut camera = image_processor::setup_camera()?;
-
         Ok(move || {
+            let mut camera = match image_processor::setup_camera() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("[Action] Failed to open camera: {}", e);
+                    return;
+                }
+            };
+
             if let Err(e) = image_processor::auto_brightness(&mut camera) {
                 eprintln!("[Action] Error: {}", e);
             }
