@@ -40,6 +40,12 @@ static COEFFS_BGR_LUMA: LazyLock<Arc<[f64]>> = LazyLock::new(|| {
     Arc::from(vec![0.0722, 0.7152, 0.2126])
 });
 
+pub fn setup_camera() -> Result<Webcam> {
+    let index = 0;
+
+    Webcam::new(index)
+}
+
 pub fn compute_raw_luma(raw_frame: &Mat) -> Result<f64> {
     let mut float_img = Mat::default();
     raw_frame.convert_to(&mut float_img, CV_32F, 1.0 / FLOAT_MAX_COLOR, 0.0)?;

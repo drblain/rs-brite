@@ -1,5 +1,10 @@
 use anyhow::{anyhow, Result};
+use x11rb::protocol::xproto::ConnectionExt;
 use std::{sync::mpsc, thread, process};
+use x11rb::connection::Connection;
+use x11rb::protocol::Event;
+use x11rb::protocol::xproto::{ModMask, GrabMode};
+use xkeysym::Keysym;
 
 // Job is a closure that can be called mutably and lives for the whole program
 pub trait Job: FnMut() + 'static {}
@@ -7,24 +12,62 @@ impl<F: FnMut() + 'static> Job for F {}
 pub trait Recipe<J: Job>: FnOnce() -> Result<J> + Send + 'static {}
 impl<F, J: Job> Recipe<J> for F where F: FnOnce() -> Result<J> + Send + 'static {}
 
-pub fn run_daemon<J>(modifiers: Option<Modifiers>, close_key: Code, trigger_key: Code, initializer: impl Recipe<J>) -> Result<()>
+pub fn run_daemon<J>(modifiers: Option<&[Keysym]>, close_key: Keysym, trigger_key: Keysym, initializer: impl Recipe<J>) -> Result<()>
 where
     J: Job
 {
-    let manager = GlobalHotKeyManager::new().map_err(|e| {
-        anyhow!("[Daemon] Failed to create hotkey manager: {:?}", e)
+    let (xconn, nscreen) = x11rb::connect(None).map_err(|e| {
+        anyhow!("[Daemon] Failed to establish connection to X server: {:?}", e)
     })?;
 
-    let hotkey = HotKey::new(modifiers, trigger_key);
-    let exitkey = HotKey::new(modifiers, close_key);
+    let xsetup = xconn.setup();
+    let root = xsetup.roots[nscreen].root;
 
-    manager.register(hotkey).map_err(|e| {
-        anyhow!("[Daemon] Failed to register hotkey: {:?}", e)
-    })?;
+    let keycode_min = xsetup.min_keycode;
+    let keycode_max = xsetup.max_keycode;
+    let keycode_count = keycode_max - keycode_min + 1;
 
-    manager.register(exitkey).map_err(|e| {
-        anyhow!("[Daemon] Failed to register exit hotkey: {:?}", e)
-    })?;
+    let mapping_res = xconn
+        .get_keyboard_mapping(keycode_min, keycode_count)
+        .map_err(|e| anyhow!("[Daemon] Failed to request keymap: {}", e))?
+        .reply()
+        .map_err(|e| anyhow!("[Daemon] Failed to receive keymap response: {}", e))?;
+
+    let hotkey = resolve_keycode(trigger_key, keycode_min, mapping_res.keysyms_per_keycode, &mapping_res.keysyms)
+        .ok_or_else(|| anyhow!("[Daemon] could not find keycode for trigger key: {}", u32::from(trigger_key)))?;
+    let exitkey = resolve_keycode(close_key, keycode_min, mapping_res.keysyms_per_keycode, &mapping_res.keysyms)
+        .ok_or_else(|| anyhow!("[Daemon] could not find keycode for trigger key: {}", u32::from(close_key)))?;
+
+    // convert Keysym slice to ModMask
+    let mods = ModMask::ANY;
+
+    xconn.grab_key(
+        true,
+        root,
+        mods,
+        hotkey,
+        GrabMode::ASYNC,
+        GrabMode::ASYNC).map_err(|e| {
+            anyhow!("[Daemon] Connection error while grabbing key: ({}, {})", hotkey, e)
+        })?
+        .check()
+        .map_err(|e| {
+            anyhow!("[Daemon] Reply error while grabbing key: ({}, {})", hotkey, e)
+        })?;
+
+    xconn.grab_key(
+        true,
+        root,
+        mods,
+        exitkey,
+        GrabMode::ASYNC,
+        GrabMode::ASYNC).map_err(|e| {
+            anyhow!("[Daemon] Connection error while grabbing key: ({}, {})", exitkey, e)
+        })?
+        .check()
+        .map_err(|e| {
+            anyhow!("[Daemon] Reply error while grabbing key: ({}, {})", exitkey, e)
+        })?;
 
     let (transmit, receive) = mpsc::channel::<()>();
 
@@ -52,28 +95,32 @@ where
     });
 
     println!("[Daemon] Starting hotkey listener...");
-    
-    let hotkey_receiver = GlobalHotKeyEvent::receiver();
 
-    for event in hotkey_receiver {
-        match event {
-            GlobalHotKeyEvent { id, state: HotKeyState::Pressed } if id == hotkey.id() => {
+    while let Ok(event) = xconn.wait_for_event() {
+        if let Event::KeyPress(ev) = event {
+            if ev.detail == hotkey {
                 println!("[Daemon] Hotkey pressed! Signaling worker thread...");
 
                 if let Err(e) = transmit.send(()){
                     eprintln!("[Daemon] Failed to send signal to worker thread with error: {}. Exiting daemon.", e);
                     process::exit(1);
                 }
-            }
-
-            GlobalHotKeyEvent { id, state: HotKeyState::Pressed } if id == exitkey.id() => {
+            } else if ev.detail == exitkey {
                 println!("[Daemon] Exit hotkey pressed! Shutting down daemon...");
                 process::exit(0);
             }
-
-            _ => {}
         }
     }
 
     Ok(())
+}
+
+fn resolve_keycode(key_target: Keysym, keycode_min: u8, keysyms_per_keycode: u8, keymapping: &[u32]) -> Option<u8> {
+    for (i, &symbol) in keymapping.iter().enumerate() {
+        if symbol == u32::from(key_target) {
+            let offset_keycode = i / (keysyms_per_keycode as usize);
+            return Some(keycode_min + offset_keycode as u8);
+        }
+    }
+    None
 }
