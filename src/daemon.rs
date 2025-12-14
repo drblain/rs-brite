@@ -44,33 +44,17 @@ where
         None => ModMask::ANY
     };
 
-    xconn.grab_key(
-        true,
-        root,
-        mods,
-        hotkey,
-        GrabMode::ASYNC,
-        GrabMode::ASYNC).map_err(|e| {
-            anyhow!("[Daemon] Connection error while grabbing key: ({}, {})", hotkey, e)
-        })?
-        .check()
+    grab_hotkey_variants(&xconn, root, hotkey, mods)
         .map_err(|e| {
-            anyhow!("[Daemon] Reply error while grabbing key: ({}, {})", hotkey, e)
+            anyhow!("[Daemon] Mapping error while grabbing key: ({}, {})", hotkey, e)
         })?;
 
-    xconn.grab_key(
-        true,
-        root,
-        mods,
-        exitkey,
-        GrabMode::ASYNC,
-        GrabMode::ASYNC).map_err(|e| {
-            anyhow!("[Daemon] Connection error while grabbing key: ({}, {})", exitkey, e)
-        })?
-        .check()
+    grab_hotkey_variants(&xconn, root, exitkey, mods)
         .map_err(|e| {
-            anyhow!("[Daemon] Reply error while grabbing key: ({}, {})", exitkey, e)
+            anyhow!("[Daemon] Mapping error while grabbing key: ({}, {})", exitkey, e)
         })?;
+
+    xconn.flush()?;
 
     let (transmit, receive) = mpsc::channel::<()>();
 
@@ -126,4 +110,26 @@ fn resolve_keycode(key_target: Keysym, keycode_min: u8, keysyms_per_keycode: u8,
         }
     }
     None
+}
+
+fn grab_hotkey_variants(xconn: &impl ConnectionExt, root: u32, keycode: u8, base_mods: ModMask) -> Result<()> {
+    let ignored_masks = [
+        ModMask::from(0u8),
+        ModMask::M2,
+        ModMask::LOCK,
+        ModMask::M2 | ModMask::LOCK
+    ];
+
+    for ignored_case in ignored_masks {
+        xconn.grab_key(
+            false,
+            root,
+            base_mods | ignored_case,
+            keycode,
+            GrabMode::ASYNC,
+            GrabMode::ASYNC
+        )?.check()?;
+    }
+
+    Ok(())
 }
